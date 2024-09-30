@@ -13,39 +13,14 @@
         #canvas-container {
             position: absolute;
             top: 0;
-            left: 50px;
+            left: 0;
             right: 0;
             bottom: 0;
-        }
-        #toolbar-left {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 50px;
-            height: 100%;
-            background-color: #f2f2f2;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding-top: 10px;
-            box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
-        }
-        #toolbar-left button {
-            background-color: #ffffff;
-            border: none;
-            margin: 10px 0;
-            padding: 10px;
-            cursor: pointer;
-            border-radius: 5px;
-            font-size: 24px;
-        }
-        #toolbar-left button:active {
-            background-color: #e0e0e0;
         }
         .toolbar-bottom {
             position: fixed;
             bottom: 0;
-            left: 50px;
+            left: 0;
             right: 0;
             display: flex;
             justify-content: center;
@@ -87,12 +62,6 @@
     </style>
 </head>
 <body>
-    <!-- Left Toolbar -->
-    <div id="toolbar-left">
-        <button id="saveBtn">💾</button>
-        <button id="loadBtn">📂</button>
-    </div>
-
     <!-- Canvas Container -->
     <div id="canvas-container">
         <canvas id="canvas"></canvas>
@@ -100,12 +69,12 @@
 
     <!-- Bottom Toolbar -->
     <div class="toolbar-bottom">
-        <button id="imageBtn">🖼️</button>
-        <button id="handBtn">✋</button>
-        <button id="selectBtn">🔲</button>
+        <button id="saveBtn">📷</button> <!-- Save button -->
+        <button id="selectBtn">🔲</button> <!-- Select tool button -->
+        <button id="imageBtn">🖼️</button> <!-- Image import button -->
+        <button id="shapesBtn">🔵</button>
         <button id="brushBtn">🖌️</button>
         <button id="eraserBtn">🧽</button>
-        <button id="shapesBtn">🔵</button>
         <button id="undoBtn">↩️</button>
         <button id="redoBtn">↪️</button>
     </div>
@@ -120,6 +89,8 @@
 
     <!-- Popup for Shapes -->
     <div class="popup" id="shapes-popup">
+        <label for="shape-color">Shape Color:</label>
+        <input type="color" id="shape-color" value="#000000">
         <button id="rectBtn">▭</button>
         <button id="circleBtn">◯</button>
         <button id="triangleBtn">△</button>
@@ -132,13 +103,14 @@
     <script>
         // Initialize Fabric.js Canvas
         const canvas = new fabric.Canvas('canvas', {
-            selection: false
+            selection: true,
+            preserveObjectStacking: true // Enable stacking order for shapes
         });
 
         // Resize canvas to fit window
         function resizeCanvas() {
-            canvas.setWidth(window.innerWidth - 50);
-            canvas.setHeight(window.innerHeight - 50);
+            canvas.setWidth(window.innerWidth);
+            canvas.setHeight(window.innerHeight - 60); // Adjust height for toolbar
             canvas.renderAll();
         }
         window.addEventListener('resize', resizeCanvas);
@@ -146,8 +118,6 @@
 
         // Tool variables
         let currentTool = 'brush';
-        let isDown, origX, origY;
-        let drawingObject;
 
         // Undo/Redo History
         let state = [];
@@ -219,12 +189,7 @@
             currentTool = 'eraser';
             canvas.isDrawingMode = false;
             canvas.selection = false;
-            canvas.hoverCursor = 'pointer';
             closePopups();
-        });
-
-        document.getElementById('eraserBtn').addEventListener('dblclick', function () {
-            openPopup('brush-popup'); // Reuse brush popup for size
         });
 
         // Eraser Functionality
@@ -238,76 +203,6 @@
             }
         });
 
-        // Image Tool
-        document.getElementById('imageBtn').addEventListener('click', function () {
-            currentTool = 'image';
-            canvas.isDrawingMode = false;
-            canvas.selection = false;
-            closePopups();
-            const input = document.createElement('input');
-            input.type = 'file';
-            input.accept = 'image/*';
-            input.onchange = function (e) {
-                const file = e.target.files[0];
-                const reader = new FileReader();
-                reader.onload = function (f) {
-                    const data = f.target.result;
-                    fabric.Image.fromURL(data, function (img) {
-                        img.scale(0.5);
-                        canvas.add(img);
-                        saveState();
-                    });
-                };
-                reader.readAsDataURL(file);
-            };
-            input.click();
-        });
-
-        // Hand Tool (Panning)
-        document.getElementById('handBtn').addEventListener('click', function () {
-            currentTool = 'hand';
-            canvas.isDrawingMode = false;
-            canvas.selection = false;
-            canvas.defaultCursor = 'grab';
-            closePopups();
-        });
-
-        let isDragging = false;
-        let lastPosX, lastPosY;
-
-        canvas.on('mouse:down', function (opt) {
-            if (currentTool === 'hand') {
-                isDragging = true;
-                lastPosX = opt.e.clientX;
-                lastPosY = opt.e.clientY;
-            }
-        });
-
-        canvas.on('mouse:move', function (opt) {
-            if (isDragging) {
-                const e = opt.e;
-                const deltaX = e.clientX - lastPosX;
-                const deltaY = e.clientY - lastPosY;
-                canvas.viewportTransform[0] += deltaX;
-                canvas.viewportTransform[1] += deltaY;
-                canvas.renderAll();
-                lastPosX = e.clientX;
-                lastPosY = e.clientY;
-            }
-        });
-
-        canvas.on('mouse:up', function () {
-            isDragging = false;
-        });
-
-        // Selection Tool
-        document.getElementById('selectBtn').addEventListener('click', function () {
-            currentTool = 'select';
-            canvas.isDrawingMode = false;
-            canvas.selection = true;
-            closePopups();
-        });
-
         // Shapes Tool
         document.getElementById('shapesBtn').addEventListener('click', function () {
             currentTool = 'shapes';
@@ -316,12 +211,12 @@
             openPopup('shapes-popup');
         });
 
-        // Shape Functions
         document.getElementById('rectBtn').addEventListener('click', function () {
+            const shapeColor = document.getElementById('shape-color').value;
             const rect = new fabric.Rect({
                 left: 100,
                 top: 100,
-                fill: 'blue',
+                fill: shapeColor,
                 width: 100,
                 height: 100
             });
@@ -331,11 +226,12 @@
         });
 
         document.getElementById('circleBtn').addEventListener('click', function () {
+            const shapeColor = document.getElementById('shape-color').value;
             const circle = new fabric.Circle({
-                left: 150,
-                top: 150,
-                radius: 50,
-                fill: 'red'
+                left: 100,
+                top: 100,
+                fill: shapeColor,
+                radius: 50
             });
             canvas.add(circle);
             saveState();
@@ -343,62 +239,76 @@
         });
 
         document.getElementById('triangleBtn').addEventListener('click', function () {
+            const shapeColor = document.getElementById('shape-color').value;
             const triangle = new fabric.Triangle({
-                left: 200,
-                top: 200,
+                left: 100,
+                top: 100,
+                fill: shapeColor,
                 width: 100,
-                height: 100,
-                fill: 'green'
+                height: 100
             });
             canvas.add(triangle);
             saveState();
             closePopups();
         });
 
-        // Save and Load Functions
+        // Save Screenshot Functionality
         document.getElementById('saveBtn').addEventListener('click', function () {
-            const json = JSON.stringify(canvas);
-            const blob = new Blob([json], { type: 'application/json' });
             const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            link.download = 'canvas.json';
+            link.href = canvas.toDataURL({
+                format: 'png',
+                multiplier: 2
+            });
+            link.download = 'canvas.png';
             link.click();
         });
 
-        document.getElementById('loadBtn').addEventListener('click', function () {
+        // Select Tool Functionality
+        document.getElementById('selectBtn').addEventListener('click', function () {
+            currentTool = 'select';
+            canvas.isDrawingMode = false;
+            canvas.selection = true; // Enable selection mode
+            closePopups();
+        });
+
+        // Image Import Functionality
+        document.getElementById('imageBtn').addEventListener('click', function () {
             const input = document.createElement('input');
             input.type = 'file';
-            input.accept = 'application/json';
-            input.onchange = function (e) {
-                const file = e.target.files[0];
+            input.accept = 'image/*';
+            input.onchange = (event) => {
+                const file = event.target.files[0];
                 const reader = new FileReader();
-                reader.onload = function (f) {
-                    const json = f.target.result;
-                    canvas.loadFromJSON(json, function () {
-                        canvas.renderAll();
+                reader.onload = (e) => {
+                    fabric.Image.fromURL(e.target.result, (img) => {
+                        img.set({
+                            left: 50,
+                            top: 50,
+                            angle: 0,
+                            padding: 10,
+                            cornersize: 10
+                        });
+                        canvas.add(img);
+                        saveState();
                     });
                 };
-                reader.readAsText(file);
+                reader.readAsDataURL(file);
             };
             input.click();
         });
 
-        // Popup Functions
+        // Close Popups
+        function closePopups() {
+            document.querySelectorAll('.popup').forEach(function (popup) {
+                popup.style.display = 'none';
+            });
+        }
+
+        // Open Popup
         function openPopup(popupId) {
             closePopups();
             document.getElementById(popupId).style.display = 'block';
         }
-
-        function closePopups() {
-            const popups = document.querySelectorAll('.popup');
-            popups.forEach(popup => popup.style.display = 'none');
-        }
-
-        document.addEventListener('click', function (e) {
-            if (!e.target.closest('#toolbar-left') && !e.target.closest('.popup')) {
-                closePopups();
-            }
-        });
     </script>
 </body>
 </html>
