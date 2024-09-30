@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>OpenWebWhiteboard</title>
+    <title>OpenWebDraw</title>
     <style>
         body, html {
             margin: 0;
@@ -283,6 +283,14 @@
                 height: 100
             });
             canvas.add(triangle);
+            closePopups();
+        });
+
+        // Hand Tool
+        document.getElementById('handBtn').addEventListener('click', function () {
+            currentTool = 'hand';
+            canvas.isDrawingMode = false;
+            canvas.selection = false; // Disable selection for hand tool
             closePopups();
         });
 
