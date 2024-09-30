@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>OpenWebWhiteboard</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 50px;
+            right: 0;
+            bottom: 0;
+        }
+        #toolbar-left {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 50px;
+            height: 100%;
+            background-color: #f2f2f2;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding-top: 10px;
+            box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+        }
+        #toolbar-left button {
+            background-color: #ffffff;
+            border: none;
+            margin: 10px 0;
+            padding: 10px;
+            cursor: pointer;
+            border-radius: 5px;
+            font-size: 24px;
+        }
+        #toolbar-left button:active {
+            background-color: #e0e0e0;
+        }
+        .toolbar-bottom {
+            position: fixed;
+            bottom: 0;
+            left: 50px;
+            right: 0;
+            display: flex;
+            justify-content: center;
+            background-color: #f2f2f2;
+            padding: 10px;
+            box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.1);
+        }
+        .toolbar-bottom button {
+            background-color: #ffffff;
+            border: none;
+            margin: 0 10px;
+            padding: 10px;
+            cursor: pointer;
+            border-radius: 5px;
+            font-size: 24px;
+        }
+        .toolbar-bottom button:active {
+            background-color: #e0e0e0;
+        }
+        .popup {
+            position: fixed;
+            bottom: 60px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 10px;
+            background-color: white;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            border-radius: 5px;
+            display: none;
+            z-index: 1000;
+        }
+        .popup label {
+            display: block;
+            margin: 5px 0;
+        }
+        .popup input[type="range"], .popup input[type="color"] {
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <!-- Left Toolbar -->
+    <div id="toolbar-left">
+        <button id="saveBtn">💾</button>
+        <button id="loadBtn">📂</button>
+    </div>
+
+    <!-- Canvas Container -->
+    <div id="canvas-container">
+        <canvas id="canvas"></canvas>
+    </div>
+
+    <!-- Bottom Toolbar -->
+    <div class="toolbar-bottom">
+        <button id="imageBtn">🖼️</button>
+        <button id="handBtn">✋</button>
+        <button id="selectBtn">🔲</button>
+        <button id="brushBtn">🖌️</button>
+        <button id="eraserBtn">🧽</button>
+        <button id="shapesBtn">🔵</button>
+        <button id="undoBtn">↩️</button>
+        <button id="redoBtn">↪️</button>
+    </div>
+
+    <!-- Popup for Brush and Eraser Settings -->
+    <div class="popup" id="brush-popup">
+        <label for="brush-size">Size:</label>
+        <input type="range" id="brush-size" min="1" max="50" value="5">
+        <label for="brush-color">Color:</label>
+        <input type="color" id="brush-color" value="#000000">
+    </div>
+
+    <!-- Popup for Shapes -->
+    <div class="popup" id="shapes-popup">
+        <label for="shape-color">Shape Color:</label>
+        <input type="color" id="shape-color" value="#ff0000">
+        <button id="rectBtn">▭</button>
+        <button id="circleBtn">◯</button>
+        <button id="triangleBtn">△</button>
+    </div>
+
+    <!-- Include Fabric.js Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.2.4/fabric.min.js"></script>
+
+    <!-- JavaScript -->
+    <script>
+        // Initialize Fabric.js Canvas
+        const canvas = new fabric.Canvas('canvas', {
+            selection: false
+        });
+
+        // Resize canvas to fit window
+        function resizeCanvas() {
+            canvas.setWidth(window.innerWidth - 50);
+            canvas.setHeight(window.innerHeight - 50);
+            canvas.renderAll();
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // Tool variables
+        let currentTool = 'brush';
+        let isDown, origX, origY;
+        let drawingObject;
+
+        // Undo/Redo History
+        let state = [];
+        let mods = 0;
+
+        function saveState() {
+            mods = 0;
+            const json = JSON.stringify(canvas);
+            state.push(json);
+        }
+
+        canvas.on('object:added', function () {
+            if (!isRedoing) {
+                state = state.slice(0, mods + 1);
+                mods = state.length - 1;
+                saveState();
+            }
+        });
+
+        // Undo/Redo Functions
+        let isRedoing = false;
+        document.getElementById('undoBtn').addEventListener('click', function () {
+            if (mods < 0) return;
+            isRedoing = true;
+            canvas.clear();
+            canvas.loadFromJSON(state[mods - 1], function () {
+                canvas.renderAll();
+                isRedoing = false;
+            });
+            mods--;
+        });
+
+        document.getElementById('redoBtn').addEventListener('click', function () {
+            if (mods >= state.length - 1) return;
+            isRedoing = true;
+            canvas.clear();
+            canvas.loadFromJSON(state[mods + 1], function () {
+                canvas.renderAll();
+                isRedoing = false;
+            });
+            mods++;
+        });
+
+        // Brush Tool
+        document.getElementById('brushBtn').addEventListener('click', function () {
+            currentTool = 'brush';
+            canvas.isDrawingMode = true;
+            canvas.freeDrawingBrush.color = document.getElementById('brush-color').value;
+            canvas.freeDrawingBrush.width = parseInt(document.getElementById('brush-size').value, 10) || 1;
+            canvas.selection = false;
+            closePopups();
+        });
+
+        // Brush Settings
+        document.getElementById('brushBtn').addEventListener('dblclick', function () {
+            openPopup('brush-popup');
+        });
+
+        document.getElementById('brush-size').addEventListener('input', function () {
+            canvas.freeDrawingBrush.width = parseInt(this.value, 10) || 1;
+        });
+
+        document.getElementById('brush-color').addEventListener('input', function () {
+            canvas.freeDrawingBrush.color = this.value;
+        });
+
+        // Eraser Tool
+        document.getElementById('eraserBtn').addEventListener('click', function () {
+            currentTool = 'eraser';
+            canvas.isDrawingMode = false;
+            canvas.selection = false;
+            closePopups();
+        });
+
+        document.getElementById('eraserBtn').addEventListener('dblclick', function () {
+            openPopup('brush-popup'); // Reuse brush popup for size
+        });
+
+        // Eraser Functionality
+        canvas.on('mouse:down', function (opt) {
+            if (currentTool === 'eraser') {
+                const pointer = canvas.getPointer(opt.e);
+                const target = canvas.findTarget(opt.e);
+                if (target) {
+                    canvas.remove(target);
+                }
+            }
+        });
+
+        // Shape Tool
+        document.getElementById('shapesBtn').addEventListener('click', function () {
+            closePopups();
+            openPopup('shapes-popup');
+        });
+
+        // Shape Color
+        const shapeColorInput = document.getElementById('shape-color');
+
+        // Rectangle Button
+        document.getElementById('rectBtn').addEventListener('click', function () {
+            const rect = new fabric.Rect({
+                left: 100,
+                top: 100,
+                fill: shapeColorInput.value,
+                width: 100,
+                height: 100
+            });
+            canvas.add(rect);
+            closePopups();
+        });
+
+        // Circle Button
+        document.getElementById('circleBtn').addEventListener('click', function () {
+            const circle = new fabric.Circle({
+                left: 200,
+                top: 100,
+                fill: shapeColorInput.value,
+                radius: 50
+            });
+            canvas.add(circle);
+            closePopups();
+        });
+
+        // Triangle Button
+        document.getElementById('triangleBtn').addEventListener('click', function () {
+            const triangle = new fabric.Triangle({
+                left: 300,
+                top: 100,
+                fill: shapeColorInput.value,
+                width: 100,
+                height: 100
+            });
+            canvas.add(triangle);
+            closePopups();
+        });
+
+        // Select Tool
+        document.getElementById('selectBtn').addEventListener('click', function () {
+            currentTool = 'select';
+            canvas.isDrawingMode = false;
+            canvas.selection = true; // Enable selection
+            closePopups();
+        });
+
+        // Load Functionality for PNG
+        document.getElementById('loadBtn').addEventListener('click', function () {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/png';
+            input.onchange = function (e) {
+                const file = e.target.files[0];
+                const reader = new FileReader();
+                reader.onload = function (f) {
+                    const imgElement = new Image();
+                    imgElement.src = f.target.result;
+                    imgElement.onload = function () {
+                        // Clear the canvas before loading the new image
+                        canvas.clear();
+                        const imgInstance = new fabric.Image(imgElement);
+                        canvas.setBackgroundImage(imgInstance, canvas.renderAll.bind(canvas), {
+                            scaleX: canvas.width / imgElement.width,
+                            scaleY: canvas.height / imgElement.height
+                        });
+                        saveState(); // Save the state after loading new image
+                    };
+                };
+                reader.readAsDataURL(file);
+            };
+            input.click();
+        });
+
+        // Save Functionality
+        document.getElementById('saveBtn').addEventListener('click', function () {
+            const link = document.createElement('a');
+            link.download = 'canvas.png';
+            link.href = canvas.toDataURL({ format: 'png' });
+            link.click();
+        });
+
+        // Close Popups
+        function closePopups() {
+            document.querySelectorAll('.popup').forEach(popup => popup.style.display = 'none');
+        }
+
+        // Open Popup
+        function openPopup(popupId) {
+            closePopups();
+            document.getElementById(popupId).style.display = 'block';
+        }
+    </script>
+</body>
+</html>
